@@ -1,79 +1,60 @@
-name: Build and Push Docker Image  
-on:  
-  push:  
-    # branches: [ "main" ]  
-    tags: [ 'v*.*.*' ]  
-  pull_request:  
-    branches: [ "main" ]  
-  # 也可以手动触发  
-  workflow_dispatch:  
-jobs:  
-  build-and-push:  
-    runs-on: ubuntu-latest  
-    permissions:  
-      contents: read  
-      packages: write  
-    steps:  
-      - name: Checkout repository  
-        uses: actions/checkout@v4  
-      - name: Set up Docker Buildx  
-        uses: docker/setup-buildx-action@v3  
-      # 登录到 GitHub 容器仓库  
-      - name: Login to GitHub Container Registry  
-        uses: docker/login-action@v3  
-        with:  
-          registry: ghcr.io  
-          username: ${{ github.repository_owner }}  
-          password: ${{ secrets.GITHUB_TOKEN }}  
-      # 提取仓库名称作为镜像名  
-      - name: Extract repository name  
-        id: repo-name  
-        run: echo "REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT  
-      
-      # 提取 Git tag 作为版本号  
-      - name: Extract tag version  
-        id: tag-version  
-        if: startsWith(github.ref, 'refs/tags/v')  
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT  
+# .github/workflows/publish-ghcr.yml
+name: Build and Push to GHCR
 
-      # 设置默认版本标签  
-      - name: Set default version  
-        id: version  
-        run: |  
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then  
-            echo "TAG=${{ steps.tag-version.outputs.VERSION }}" >> $GITHUB_OUTPUT  
-          else  
-            SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)  
-            DATE=$(date +'%Y%m%d')  
-            echo "TAG=${DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT  
-          fi  
+on:
+  push:
+    branches: [ "main" ] # 仅在 main 分支有 push 时触发
 
-      - name: Build and Push Multi-Arch Images  
-        uses: docker/build-push-action@v5  
-        with:  
-          context: .  
-          push: true  
-          tags: |  
-            ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:latest  
-            ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:${{ steps.version.outputs.TAG }}  
-      
-      # 专门为 ARM64 架构构建并推送镜像  
-      - name: Build and Push ARM64 Image  
-        uses: docker/build-push-action@v5  
-        with:  
-          context: .  
-          push: true  
-          platforms: linux/arm64  
-          tags: |  
-            ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:arm-latest  
-            ${{ github.ref_type == 'tag' && format('ghcr.io/{0}:arm-{1}', steps.repo-name.outputs.REPO_NAME, steps.version.outputs.TAG) || '' }}  
-      
-      # 输出镜像信息  
-      - name: Image digest  
-        run: |  
-          echo "Multi-arch image has been pushed to ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:latest"  
-          echo "Multi-arch image has been pushed to ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:${{ steps.version.outputs.TAG }}"  
-          echo "ARM64-only image has been pushed to ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:arm-latest"  
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then  
-            echo "ARM64-only image has been pushed to ghcr.io/${{ steps.repo-name.outputs.REPO_NAME }}:arm-${{ steps.version.outputs.TAG }}"  
-          fi  
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # 需要权限来读取仓库内容和写入 GitHub Packages (GHCR)
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 设置 Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 登录到 GitHub Container Registry
+      # 使用自动生成的 GITHUB_TOKEN 进行认证，无需手动设置 Secrets
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # 使用触发工作流的 GitHub 用户名
+          password: ${{ secrets.GITHUB_TOKEN }} # 使用 GitHub 自动生成的 Token
+
+      # (推荐) 使用 docker/metadata-action 自动生成镜像标签和元数据
+      # 这会根据 Git 事件（如分支名、标签、SHA）创建合适的镜像标签
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/c2a # 修改为你想要的镜像名
+          tags: |
+            # 为最新的 commit 生成 sha- 开头的标签 (例如 sha-a1b2c3d)
+            type=sha,prefix=sha-
+            # 如果是 main 分支，添加 latest 标签
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            # 如果创建了 Git tag (例如 v1.0.0), 则使用该 tag 作为镜像标签
+            type=ref,event=tag
+
+      # 构建并推送 Docker 镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true # 设置为 true，表示构建并推送
+          tags: ${{ steps.meta.outputs.tags }} # 使用 metadata-action 生成的标签
+          labels: ${{ steps.meta.outputs.labels }} # 使用 metadata-action 生成的标签
+          # 启用 GitHub Actions 缓存加速构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
